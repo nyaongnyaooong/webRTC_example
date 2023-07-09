@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>화면 표시</title>
+  </head>
+  <body>
+    <video id="receivedVideo" autoplay></video>
+    <script>
+      const socket = new WebSocket("ws://localhost:3000"); // WebSocket 서버 주소
+
+      socket.addEventListener("open", function () {
+        console.log("WebSocket 연결 성공");
+      });
+
+      socket.addEventListener("close", function () {
+        console.log("WebSocket 연결 종료");
+      });
+
+      socket.addEventListener("error", function (error) {
+        console.error("WebSocket 오류:", error);
+      });
+
+      socket.addEventListener("message", function (event) {
+        const videoElement = document.getElementById("receivedVideo");
+        const blobReader = new FileReader();
+
+        blobReader.onload = function () {
+          const data = JSON.parse(blobReader.result);
+
+          // 오디오를 요청하지 않고 비디오만 요청
+          const videoConstraints = { video: true, audio: false };
+
+          // 요청된 비디오 제약 조건과 서버에서 전달받은 제약 조건을 병합
+          const mergedConstraints = Object.assign({}, data, videoConstraints);
+
+          navigator.mediaDevices.getUserMedia(mergedConstraints).then(function (stream) {
+            videoElement.srcObject = stream;
+          });
+        };
+
+        blobReader.readAsText(event.data);
+      });
+    </script>
+  </body>
+</html>

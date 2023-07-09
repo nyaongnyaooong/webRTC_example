@@ -1,0 +1,96 @@
+<!-- public/index.html -->
+
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>WebRTC Screen Sharing</title>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+  <h1>WebRTC Screen Sharing</h1>
+  <video id="localVideo" autoplay></video>
+  <video id="remoteVideo" autoplay></video>
+
+  <script>
+    const socket = io();
+
+    // getUserMedia로 비디오 스트림을 얻습니다.
+    navigator.mediaDevices.getDisplayMedia({ video: true })
+      .then((stream) => {
+        const localVideo = document.getElementById('localVideo');
+        localVideo.srcObject = stream;
+
+        // 새로운 연결을 생성합니다.
+        const peerConnection = new RTCPeerConnection();
+
+        // 로컬 비디오 스트림을 peerConnection에 추가합니다.
+        stream.getTracks().forEach((track) => {
+          peerConnection.addTrack(track, stream);
+        });
+
+        peerConnection.onicecandidate = (event) => {
+          if (event.candidate) {
+            socket.emit('candidate', event.candidate);
+          }
+        };
+
+        // 원격 비디오 스트림이 도착하면 실행됩니다.
+        peerConnection.ontrack = (event) => {
+          const remoteVideo = document.getElementById('remoteVideo');
+          remoteVideo.srcObject = event.streams[0];
+        };
+
+        // offer를 생성하고 소켓을 통해 전송합니다.
+        peerConnection.createOffer()
+          .then((offer) => {
+            return peerConnection.setLocalDescription(offer);
+          })
+          .then(() => {
+            socket.emit('offer', peerConnection.localDescription);
+          })
+          .catch((error) => {
+            console.error('Error creating offer:', error);
+          });
+
+        // offer를 수신하면 answer를 생성하고 소켓을 통해 전송합니다.
+        socket.on('offer', (offer) => {
+          peerConnection.setRemoteDescription(offer)
+            .then(() => {
+              return peerConnection.createAnswer();
+            })
+            .then((answer) => {
+              return peerConnection.setLocalDescription(answer);
+            })
+            .then(() => {
+              socket.emit('answer', peerConnection.localDescription);
+            })
+            .catch((error) => {
+              console.error('Error creating answer:', error);
+            });
+        });
+
+        // answer를 수신하면 remoteDescription을 설정합니다.
+        socket.on('answer', (answer) => {
+          peerConnection.setRemoteDescription(answer)
+            .catch((error) => {
+              console.error('Error setting remote description:', error);
+            });
+        });
+
+        // candidate를 수신하면 peerConnection에 추가합니다.
+        socket.on('candidate', (candidate) => {
+          peerConnection.addIceCandidate(candidate)
+            .catch((error) => {
+              console.error('Error adding ICE candidate:', error);
+            });
+        });
+      })
+      .catch((error) => {
+        console.error('Error accessing media devices:', error);
+      });
+  </script>
+</body>
+
+</html>
